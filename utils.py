@@ -30,17 +30,33 @@ def create_inpatient_calendar_df(schedule_df: pd.DataFrame) -> pd.DataFrame:
     pivot = df.pivot_table(
         index="Week Start",
         columns="Day", # Mon, Tue...
-        values="Resident",
-        aggfunc=lambda x: ", ".join(x.unique())
+        values="Date", # We need both Date and Resident
+        aggfunc=lambda x: "TEMP" # Placeholder
     )
     
-    # Reorder columns
-    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-    existing_days = [d for d in days if d in pivot.columns]
-    pivot = pivot[existing_days]
+    # Actually, pivot_table is tricky if we want combined string "Date - Resident"
+    # Let's iterate.
+    week_starts = sorted(df["Week Start"].unique())
+    days_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
     
-    # Reset index to make Week Start a column
-    pivot = pivot.reset_index()
-    pivot["Week Start"] = pivot["Week Start"].dt.strftime('%Y-%m-%d')
+    cal_rows = []
     
-    return pivot
+    for ws in week_starts:
+        week_data = df[df["Week Start"] == ws]
+        row = {"Week Start": ws.strftime('%Y-%m-%d')}
+        
+        for d_name in days_order:
+            day_data = week_data[week_data["Day"] == d_name]
+            if not day_data.empty:
+                # Combine Date and Resident
+                entries = []
+                for _, r in day_data.iterrows():
+                    d_str = r["Date"].strftime("%m/%d")
+                    res = r["Resident"]
+                    entries.append(f"{d_str}\n{res}")
+                row[d_name] = "\n".join(entries)
+            else:
+                row[d_name] = ""
+        cal_rows.append(row)
+        
+    return pd.DataFrame(cal_rows, columns=["Week Start"] + days_order)

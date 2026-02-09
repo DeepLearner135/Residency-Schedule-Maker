@@ -431,13 +431,19 @@ class ScheduleSolver:
                     # Is resident assigned to an Attending?
                     assigned_attending = self._get_assigned_attending(r, current)
                     if assigned_attending and assigned_attending in self.attendings_df["Name"].values:
-                        # Is resident on vacation?
-                        if self._is_on_vacation(r, current, current):
-                            needed_coverage.append({
-                                "Date": current,
-                                "Attending Needed": assigned_attending,
-                                "Resident Away": r
-                            })
+                        # 1. Check if Attending has Clinic today
+                        att_row = self.attendings_df[self.attendings_df["Name"] == assigned_attending].iloc[0]
+                        clinic_days = str(att_row["Clinic Days"])
+                        day_name = current.strftime("%A")
+                        
+                        if day_name in clinic_days:
+                            # 2. Is resident on vacation?
+                            if self._is_on_vacation(r, current, current):
+                                needed_coverage.append({
+                                    "Date": current,
+                                    "Attending Needed": assigned_attending,
+                                    "Resident Away": r
+                                })
             current += timedelta(days=1)
             
         if not needed_coverage:

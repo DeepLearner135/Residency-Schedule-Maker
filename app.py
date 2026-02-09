@@ -28,8 +28,8 @@ with st.sidebar:
     default_start = date(2026, 7, 6)
     default_end = date(2027, 6, 25)
     
-    start_date = st.date_input("Schedule Start Date", value=default_start)
-    end_date = st.date_input("Schedule End Date", value=default_end)
+    start_date = st.date_input("Schedule Start Date", value=default_start, format="MM/DD/YYYY")
+    end_date = st.date_input("Schedule End Date", value=default_end, format="MM/DD/YYYY")
     
     st.divider()
     st.header("Data Import")
@@ -157,8 +157,8 @@ with tab_blocks:
     with st.expander("Manually Add New Block"):
         with st.form("add_block_form"):
             b_name = st.text_input("Block Name (e.g., Block 1)")
-            b_start = st.date_input("Start Date")
-            b_end = st.date_input("End Date")
+            b_start = st.date_input("Start Date", format="MM/DD/YYYY")
+            b_end = st.date_input("End Date", format="MM/DD/YYYY")
             submitted = st.form_submit_button("Add Block")
             if submitted and b_name:
                 new_block = pd.DataFrame({"Block Name": [b_name], "Start Date": [b_start], "End Date": [b_end]})
@@ -170,8 +170,8 @@ with tab_blocks:
         num_rows="dynamic",
         hide_index=True,
         column_config={
-            "Start Date": st.column_config.DateColumn("Start Date"),
-            "End Date": st.column_config.DateColumn("End Date")
+            "Start Date": st.column_config.DateColumn("Start Date", format="MM/DD/YYYY"),
+            "End Date": st.column_config.DateColumn("End Date", format="MM/DD/YYYY")
         }
     )
 
@@ -219,14 +219,22 @@ with tab_blocks:
         attending_options = st.session_state.attendings_df["Name"].tolist() if not st.session_state.attendings_df.empty else []
         options = ["Satellite", "Elective", "Research"] + attending_options
         
-        column_config = {
-            col: st.column_config.SelectboxColumn(
-                col,
+        column_config = {}
+        for col in block_names:
+            # Lookup dates
+            block_row = st.session_state.blocks_df[st.session_state.blocks_df["Block Name"] == col]
+            if not block_row.empty:
+                s_date = pd.to_datetime(block_row.iloc[0]["Start Date"]).strftime("%m/%d")
+                e_date = pd.to_datetime(block_row.iloc[0]["End Date"]).strftime("%m/%d")
+                label = f"{col} ({s_date}-{e_date})"
+            else:
+                label = col
+                
+            column_config[col] = st.column_config.SelectboxColumn(
+                label=label,
                 options=options,
                 required=False
             )
-            for col in block_names
-        }
         
         st.write("Assign an Attending or Rotation (e.g. Satellite) for each resident per block.")
         st.info("💡 **Tip:** To create combined rotations (e.g., 'Dr. A & Dr. B') or split blocks, simply add them as a new 'Attending' in the **Residents & Attendings** tab.")
@@ -424,20 +432,38 @@ with tab_inpatient:
 with tab_vacation:
     st.header("Vacation Requests")
     
-    # Form to add vacation
-    with st.expander("Add Vacation Request", expanded=True):
-        with st.form("add_vacation"):
-            v_resident = st.selectbox("Resident", options=st.session_state.residents_df["Name"].tolist() if not st.session_state.residents_df.empty else [])
-            v_start = st.date_input("Start Date")
-            v_end = st.date_input("End Date")
-            submit_v = st.form_submit_button("Add Vacation")
+ 
             
-            if submit_v and v_resident and v_start <= v_end:
+    # Re-implmenting Vacation Form with auto-update
+    # We'll use columns to make it look like a form row
+    st.write("**Add Vacation Request**")
+    col_v1, col_v2, col_v3, col_v4 = st.columns([2, 1, 1, 1])
+    
+    with col_v1:
+        v_resident = st.selectbox("Resident", options=st.session_state.residents_df["Name"].tolist() if not st.session_state.residents_df.empty else [], key="vac_res")
+        
+    with col_v2:
+        # Callback to update end date
+        def on_vac_start_change():
+            if 'vac_start' in st.session_state:
+                st.session_state.vac_end = st.session_state.vac_start + timedelta(days=4)
+        
+        v_start = st.date_input("Start", key="vac_start", format="MM/DD/YYYY", on_change=on_vac_start_change)
+        
+    with col_v3:
+         v_end = st.date_input("End", key="vac_end", format="MM/DD/YYYY")
+         
+    with col_v4:
+        # Align button
+        st.write("")
+        st.write("")
+        if st.button("Add"):
+            if v_resident and v_start <= v_end:
                 new_vac = pd.DataFrame({"Resident": [v_resident], "Start Date": [v_start], "End Date": [v_end]})
                 st.session_state.vacations_df = pd.concat([st.session_state.vacations_df, new_vac], ignore_index=True)
-                st.success(f"Added vacation for {v_resident}")
-            elif submit_v:
-                st.error("Invalid input. Check dates.")
+                st.success(f"Added {v_resident}")
+            else:
+                st.error("Invalid")
 
     st.subheader("Current Vacation Requests")
     st.session_state.vacations_df = st.data_editor(
@@ -445,8 +471,8 @@ with tab_vacation:
         num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "Start Date": st.column_config.DateColumn("Start Date"),
-            "End Date": st.column_config.DateColumn("End Date")
+            "Start Date": st.column_config.DateColumn("Start Date", format="MM/DD/YYYY"),
+            "End Date": st.column_config.DateColumn("End Date", format="MM/DD/YYYY")
         }
     )
 
@@ -487,7 +513,13 @@ with tab_coverage:
 
         if 'coverage_df' in st.session_state and not st.session_state.coverage_df.empty:
             st.subheader("Coverage Schedule")
-            st.dataframe(st.session_state.coverage_df, use_container_width=True)
+            # Enable row deletion
+            st.session_state.coverage_df = st.data_editor(
+                st.session_state.coverage_df,
+                num_rows="dynamic",
+                use_container_width=True,
+                key="coverage_editor"
+            )
             
     with col_cov2:
         if 'coverage_stats' in st.session_state and not st.session_state.coverage_stats.empty:
@@ -532,32 +564,53 @@ with tab_export:
                 })
                 metadata.to_excel(writer, sheet_name='Metadata', index=False)
                 
+                # 4. Inpatient Calendar View
+                if 'inpatient_schedule_df' in st.session_state and not st.session_state.inpatient_schedule_df.empty:
+                    import utils
+                    cal_df = utils.create_inpatient_calendar_df(st.session_state.inpatient_schedule_df)
+                    cal_df.to_excel(writer, sheet_name='Inpatient Calendar', index=False)
+
+                # 5. Statistics
+                # Aggregate all stats into one sheet or multiple
+                # Let's create a 'Statistics' sheet with multiple tables spaced out
+                stats_sheet = writer.book.add_worksheet('Statistics')
+                row_cursor = 0
+                
+                # Helper to write df to sheet
+                def write_df_to_stats(df, title, start_row):
+                    stats_sheet.write(start_row, 0, title)
+                    # Write header
+                    for col_num, value in enumerate(df.columns.values):
+                        stats_sheet.write(start_row + 1, col_num, value)
+                    # Write data
+                    for row_num, row_data in enumerate(df.values):
+                        for col_num, value in enumerate(row_data):
+                            stats_sheet.write(start_row + 2 + row_num, col_num, value)
+                    return start_row + len(df) + 4 # Space for next table
+                
+                # Call Stats
+                if 'call_schedule_df' in st.session_state:
+                    c_counts = st.session_state.call_schedule_df["Resident"].value_counts().reset_index()
+                    c_counts.columns = ["Resident", "Call Weeks"]
+                    row_cursor = write_df_to_stats(c_counts, "Call Schedule Stats", row_cursor)
+                    
+                # Inpatient Stats
+                if 'inpatient_schedule_df' in st.session_state:
+                    i_counts = st.session_state.inpatient_schedule_df["Resident"].value_counts().reset_index()
+                    i_counts.columns = ["Resident", "Inpatient Days"]
+                    row_cursor = write_df_to_stats(i_counts, "Inpatient Schedule Stats", row_cursor)
+                    
+                # Coverage Stats
+                if 'coverage_stats' in st.session_state:
+                     row_cursor = write_df_to_stats(st.session_state.coverage_stats, "Cross Coverage Stats", row_cursor)
+                     
+                
             st.download_button(
                 label="Download Excel File",
                 data=buffer,
                 file_name=f"Residency_Schedule_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
                 mime="application/vnd.ms-excel"
             )
-            
-            # Inpatient Calendar Export
-            st.divider()
-            if st.button("Download Inpatient Calendar (View)"):
-                if 'inpatient_schedule_df' in st.session_state and not st.session_state.inpatient_schedule_df.empty:
-                    import utils
-                    cal_df = utils.create_inpatient_calendar_df(st.session_state.inpatient_schedule_df)
-                    
-                    buffer_cal = io.BytesIO()
-                    with pd.ExcelWriter(buffer_cal, engine='xlsxwriter') as writer:
-                        cal_df.to_excel(writer, index=False)
-                    
-                    st.download_button(
-                        label="Download Calendar View",
-                        data=buffer_cal,
-                        file_name=f"Inpatient_Calendar_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                        mime="application/vnd.ms-excel"
-                    )
-                else:
-                    st.error("No Inpatient Schedule found.")
 
     with col_ex2:
         st.subheader("Import State")
@@ -634,23 +687,81 @@ with tab_export:
                     call_attending = week_row["Attending"] if "Attending" in week_row else "Unassigned"
                     week_end = week_row["Week End"]
                     
-                    # Get Inpatient
-                    inpatient_text = "None"
-                    if 'inpatient_schedule_df' in st.session_state and not st.session_state.inpatient_schedule_df.empty:
-                         mask = (pd.to_datetime(st.session_state.inpatient_schedule_df["Date"]) >= pd.to_datetime(selected_week_start)) & \
-                                (pd.to_datetime(st.session_state.inpatient_schedule_df["Date"]) <= pd.to_datetime(week_end))
-                         inp_week = st.session_state.inpatient_schedule_df[mask]
-                         if not inp_week.empty:
-                             inpatient_residents = inp_week["Resident"].unique()
-                             inpatient_text = ", ".join(inpatient_residents)
                     
-                    email_body = f"""RESIDENT SCHEDULE WEEK OF {pd.to_datetime(selected_week_start).strftime('%m/%d/%y')}
-CALL:
+                    # 1. Dates of Call
+                    # "Week of..." is selected_week_start
+                    # Calculate Sunday
+                    w_start_dt = pd.to_datetime(selected_week_start)
+                    w_end_dt = pd.to_datetime(week_end)
+                    call_dates_str = f"{w_start_dt.strftime('%m/%d')} - {w_end_dt.strftime('%m/%d')}"
+                    
+                    # 2. Daily Inpatient Schedule
+                    inpatient_daily_text = ""
+                    if 'inpatient_schedule_df' in st.session_state and not st.session_state.inpatient_schedule_df.empty:
+                         # Filter for Mon-Fri of this week
+                         mask = (pd.to_datetime(st.session_state.inpatient_schedule_df["Date"]) >= w_start_dt) & \
+                                (pd.to_datetime(st.session_state.inpatient_schedule_df["Date"]) <= w_end_dt)
+                         inp_week = st.session_state.inpatient_schedule_df[mask].sort_values("Date")
+                         
+                         for _, row in inp_week.iterrows():
+                             d_str = pd.to_datetime(row["Date"]).strftime("%A %m/%d")
+                             r_name = row["Resident"]
+                             inpatient_daily_text += f"{d_str}: {r_name}\n"
+                    
+                    if not inpatient_daily_text:
+                        inpatient_daily_text = "None scheduled."
+
+                    # 3. Residents on Vacation
+                    vacation_text = ""
+                    if 'vacations_df' in st.session_state and not st.session_state.vacations_df.empty:
+                        # Check overlaps with this week
+                        active_vacations = []
+                        for _, v_row in st.session_state.vacations_df.iterrows():
+                             # If vacation overlaps with week window
+                             v_s = pd.to_datetime(v_row["Start Date"])
+                             v_e = pd.to_datetime(v_row["End Date"])
+                             
+                             if max(v_s, w_start_dt) <= min(v_e, w_end_dt):
+                                 active_vacations.append(v_row["Resident"])
+                        
+                        if active_vacations:
+                            vacation_text = ", ".join(sorted(list(set(active_vacations))))
+                        else:
+                            vacation_text = "None"
+                    
+                    # 4. Cross Coverage
+                    coverage_text = ""
+                    if 'coverage_df' in st.session_state and not st.session_state.coverage_df.empty:
+                        # Filter for this week
+                        mask = (pd.to_datetime(st.session_state.coverage_df["Date"]) >= w_start_dt) & \
+                               (pd.to_datetime(st.session_state.coverage_df["Date"]) <= w_end_dt)
+                        cov_week = st.session_state.coverage_df[mask].sort_values("Date")
+                        
+                        for _, row in cov_week.iterrows():
+                            d_str = pd.to_datetime(row["Date"]).strftime("%A %m/%d")
+                            cov_res = row["Covering Resident"]
+                            att_needed = row["Attending Needed"]
+                            away_res = row["Resident Away"]
+                            coverage_text += f"{d_str}: {cov_res} covering {att_needed} (for {away_res})\n"
+                            
+                    if not coverage_text:
+                        coverage_text = "None."
+
+
+                    email_body = f"""RESIDENT SCHEDULE WEEK OF {w_start_dt.strftime('%m/%d/%y')}
+
+CALL ({call_dates_str}):
 Resident: {call_resident}
 Attending: {call_attending}
 
 INPATIENT:
-{inpatient_text}
+{inpatient_daily_text}
+
+CROSS COVERAGE:
+{coverage_text}
+
+RESIDENTS ON VACATION:
+{vacation_text}
 
 CLINIC:
 (Refer to Block Schedule)
