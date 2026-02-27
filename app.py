@@ -21,6 +21,9 @@ if 'vacations_df' not in st.session_state:
 if 'blocks_df' not in st.session_state:
     st.session_state.blocks_df = pd.DataFrame(columns=["Block Name", "Start Date", "End Date"])
 
+if 'lectures_df' not in st.session_state:
+    st.session_state.lectures_df = pd.DataFrame(columns=["Date", "Unit", "Time Slot", "Topic/Speaker"])
+
 # Sidebar
 with st.sidebar:
     st.header("Settings")
@@ -69,8 +72,8 @@ with st.sidebar:
             st.error(f"Error processing file: {e}")
 
 # Tabs
-tab_residents, tab_blocks, tab_call, tab_inpatient, tab_vacation, tab_coverage, tab_export = st.tabs([
-    "Residents & Attendings", "Block Schedule", "Call Schedule", "Inpatient Schedule", "Vacation", "Cross Coverage", "Export"
+tab_residents, tab_blocks, tab_call, tab_inpatient, tab_vacation, tab_coverage, tab_lectures, tab_export = st.tabs([
+    "Residents & Attendings", "Block Schedule", "Call Schedule", "Inpatient Schedule", "Vacation", "Cross Coverage", "Lecture Schedule", "Export"
 ])
 
 with tab_residents:
@@ -180,17 +183,21 @@ with tab_blocks:
     st.subheader("2. Assign Residents to Blocks")
     
     # Auto-Assignment Button
+    lock_blocks = st.checkbox("Lock current assignments", value=True, help="If checked, currently assigned rotations won't be changed.")
     if st.button("Auto-Assign Rotations (Solver)"):
         from solver import ScheduleSolver
         if not st.session_state.blocks_df.empty and not st.session_state.residents_df.empty:
+             current_assignments = st.session_state.block_assignments if lock_blocks and 'block_assignments' in st.session_state else pd.DataFrame()
              solver = ScheduleSolver(
                 st.session_state.residents_df,
                 st.session_state.attendings_df,
                 st.session_state.blocks_df,
-                pd.DataFrame(), # No Assignments yet
+                current_assignments,
                 st.session_state.vacations_df,
                 start_date,
-                end_date
+                end_date,
+                st.session_state.get('inpatient_schedule_df'),
+                st.session_state.get('coverage_df')
             )
              with st.spinner("Assigning Rotations..."):
                  assignments = solver.solve_block_schedule()
@@ -217,7 +224,7 @@ with tab_blocks:
 
         # Options for dropdown (Attendings + Special Rotations)
         attending_options = st.session_state.attendings_df["Name"].tolist() if not st.session_state.attendings_df.empty else []
-        options = ["Satellite", "Elective", "Research"] + attending_options
+        options = ["Satellite (L&M)", "Elective", "Research"] + attending_options
         
         column_config = {}
         for col in block_names:
@@ -236,7 +243,7 @@ with tab_blocks:
                 required=False
             )
         
-        st.write("Assign an Attending or Rotation (e.g. Satellite) for each resident per block.")
+        st.write("Assign an Attending or Rotation (e.g. Satellite (L&M)) for each resident per block.")
         st.info("💡 **Tip:** To create combined rotations (e.g., 'Dr. A & Dr. B') or split blocks, simply add them as a new 'Attending' in the **Residents & Attendings** tab.")
         
         edited_assignments = st.data_editor(
@@ -273,12 +280,12 @@ with tab_blocks:
                 # Get Scheduled
                 row_assign = st.session_state.block_assignments.loc[r]
                 sched_el = row_assign.astype(str).str.contains("Elective", case=False).sum()
-                sched_sat = row_assign.astype(str).str.contains("Satellite", case=False).sum()
+                sched_sat = row_assign.astype(str).str.contains("Satellite (L&M)", case=False, regex=False).sum()
                 
                 stats_data.append({
                     "Resident": r,
                     "Total Electives": prior_el + sched_el,
-                    "Scheduled Satellite": sched_sat,
+                    "Scheduled Satellite (L&M)": sched_sat,
                     "Prior Electives": prior_el,
                     "Scheduled Electives": sched_el
                 })
@@ -330,7 +337,9 @@ with tab_call:
                     st.session_state.block_assignments,
                     st.session_state.vacations_df,
                     start_date,
-                    end_date
+                    end_date,
+                    st.session_state.get('inpatient_schedule_df'),
+                    st.session_state.get('coverage_df')
                 )
                 
                 with st.spinner("Solving..."):
@@ -394,6 +403,7 @@ with tab_inpatient:
     col_i1, col_i2 = st.columns([1, 3])
     
     with col_i1:
+        lock_inpatient = st.checkbox("Lock current inpatient assignments", value=True, help="If checked, locked days won't be changed.")
         if st.button("Generate Inpatient Schedule"):
             from solver import ScheduleSolver
             
@@ -405,7 +415,9 @@ with tab_inpatient:
                     st.session_state.block_assignments,
                     st.session_state.vacations_df,
                     start_date,
-                    end_date
+                    end_date,
+                    st.session_state.get('inpatient_schedule_df') if lock_inpatient else None,
+                    st.session_state.get('coverage_df')
                 )
                 
                 with st.spinner("Solving Inpatient Schedule..."):
@@ -421,7 +433,29 @@ with tab_inpatient:
 
     with col_i2:
         if 'inpatient_schedule_df' in st.session_state:
-            st.dataframe(st.session_state.inpatient_schedule_df, use_container_width=True)
+            if "Locked" not in st.session_state.inpatient_schedule_df.columns:
+                st.session_state.inpatient_schedule_df.insert(0, "Locked", False)
+                
+            resident_names = st.session_state.residents_df["Name"].tolist() if "residents_df" in st.session_state else []
+            
+            st.session_state.inpatient_schedule_df = st.data_editor(
+                st.session_state.inpatient_schedule_df,
+                column_config={
+                    "Locked": st.column_config.CheckboxColumn(
+                        "Lock",
+                        help="Lock this assignment",
+                        default=False,
+                    ),
+                    "Resident": st.column_config.SelectboxColumn(
+                        "Resident",
+                        options=resident_names,
+                        required=True
+                    )
+                },
+                num_rows="fixed",
+                hide_index=True,
+                use_container_width=True
+            )
             
             # Stats
             st.write("### Stats")
@@ -483,6 +517,7 @@ with tab_coverage:
     col_cov1, col_cov2 = st.columns([2, 1])
     
     with col_cov1:
+        lock_coverage = st.checkbox("Lock current cross coverage assignments", value=True, help="If checked, locked days won't be changed.")
         if st.button("Generate Cross Coverage"):
             from solver import ScheduleSolver
             
@@ -494,7 +529,9 @@ with tab_coverage:
                     st.session_state.block_assignments,
                     st.session_state.vacations_df,
                     start_date,
-                    end_date
+                    end_date,
+                    st.session_state.get('inpatient_schedule_df'),
+                    st.session_state.get('coverage_df') if lock_coverage else None
                 )
                 
                 with st.spinner("Calculating Coverage Needs..."):
@@ -513,10 +550,28 @@ with tab_coverage:
 
         if 'coverage_df' in st.session_state and not st.session_state.coverage_df.empty:
             st.subheader("Coverage Schedule")
-            # Enable row deletion
+            if "Locked" not in st.session_state.coverage_df.columns:
+                st.session_state.coverage_df.insert(0, "Locked", False)
+                
+            resident_names = st.session_state.residents_df["Name"].tolist() if "residents_df" in st.session_state else []
+            
+            # Enable row deletion and editing
             st.session_state.coverage_df = st.data_editor(
                 st.session_state.coverage_df,
+                column_config={
+                    "Locked": st.column_config.CheckboxColumn(
+                        "Lock",
+                        help="Lock this assignment",
+                        default=False,
+                    ),
+                    "Covering Resident": st.column_config.SelectboxColumn(
+                        "Covering Resident",
+                        options=resident_names,
+                        required=True
+                    )
+                },
                 num_rows="dynamic",
+                hide_index=True,
                 use_container_width=True,
                 key="coverage_editor"
             )
@@ -525,6 +580,53 @@ with tab_coverage:
         if 'coverage_stats' in st.session_state and not st.session_state.coverage_stats.empty:
             st.subheader("Coverage Stats")
             st.dataframe(st.session_state.coverage_stats, use_container_width=True)
+
+with tab_lectures:
+    st.header("Lecture Schedule")
+    st.write("Manage daily lectures and educational events.")
+    
+    # 1. Quick Add Form
+    with st.expander("Add New Lecture"):
+        with st.form("add_lecture_form"):
+            col_l1, col_l2, col_l3, col_l4 = st.columns(4)
+            with col_l1:
+                l_date = st.date_input("Date", format="MM/DD/YYYY")
+            with col_l2:
+                l_unit = st.text_input("Unit (e.g. CNS)")
+            with col_l3:
+                time_slots = ["7:30-8:30 AM", "8-9 AM", "9-10 AM", "12-1 PM", "Other"]
+                l_slot = st.selectbox("Time Slot", options=time_slots)
+            with col_l4:
+                l_topic = st.text_input("Topic / Speaker")
+                
+            submitted = st.form_submit_button("Add Lecture")
+            if submitted and l_topic and l_unit:
+                new_lec = pd.DataFrame({
+                    "Date": [l_date],
+                    "Unit": [l_unit],
+                    "Time Slot": [l_slot],
+                    "Topic/Speaker": [l_topic]
+                })
+                st.session_state.lectures_df = pd.concat([st.session_state.lectures_df, new_lec], ignore_index=True)
+                st.success("Lecture Added!")
+
+    st.subheader("Current Lectures")
+    if not st.session_state.lectures_df.empty:
+        t_options = ["7:30-8:30 AM", "8-9 AM", "9-10 AM", "12-1 PM", "Other"]
+        
+        st.session_state.lectures_df = st.data_editor(
+            st.session_state.lectures_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            column_config={
+                "Date": st.column_config.DateColumn("Date", format="MM/DD/YYYY"),
+                "Unit": st.column_config.TextColumn("Unit"),
+                "Time Slot": st.column_config.SelectboxColumn("Time Slot", options=t_options),
+                "Topic/Speaker": st.column_config.TextColumn("Topic/Speaker")
+            }
+        )
+    else:
+        st.info("No lectures added yet.")
 
 with tab_export:
     st.header("Export & Import")
@@ -544,8 +646,20 @@ with tab_export:
                 if 'inpatient_schedule_df' in st.session_state:
                     st.session_state.inpatient_schedule_df.to_excel(writer, sheet_name='Inpatient Schedule', index=False)
                 if 'block_assignments' in st.session_state:
-                    # Save with index
-                    st.session_state.block_assignments.to_excel(writer, sheet_name='Block Assignments')
+                    # Rename columns to include dates if possible
+                    export_assignments = st.session_state.block_assignments.copy()
+                    if 'blocks_df' in st.session_state and not st.session_state.blocks_df.empty:
+                        new_cols = []
+                        for col in export_assignments.columns:
+                            b_row = st.session_state.blocks_df[st.session_state.blocks_df["Block Name"] == col]
+                            if not b_row.empty:
+                                s_date = pd.to_datetime(b_row.iloc[0]["Start Date"]).strftime("%m/%d/%Y")
+                                e_date = pd.to_datetime(b_row.iloc[0]["End Date"]).strftime("%m/%d/%Y")
+                                new_cols.append(f"{col} ({s_date} - {e_date})")
+                            else:
+                                new_cols.append(col)
+                        export_assignments.columns = new_cols
+                    export_assignments.to_excel(writer, sheet_name='Block Assignments')
                 
                 # 2. Configuration Data (For Restore)
                 if 'residents_df' in st.session_state:
@@ -556,6 +670,8 @@ with tab_export:
                     st.session_state.blocks_df.to_excel(writer, sheet_name='Blocks', index=False)
                 if 'vacations_df' in st.session_state:
                     st.session_state.vacations_df.to_excel(writer, sheet_name='Vacations', index=False)
+                if 'lectures_df' in st.session_state:
+                    st.session_state.lectures_df.to_excel(writer, sheet_name='Lectures', index=False)
                     
                 # 3. Metadata
                 metadata = pd.DataFrame({
@@ -650,6 +766,12 @@ with tab_export:
                         st.session_state.vacations_df = pd.read_excel(xls, 'Vacations')
                         st.success("Loaded Vacations")
                         
+                    # Lectures
+                    if 'Lectures' in xls.sheet_names:
+                        st.session_state.lectures_df = pd.read_excel(xls, 'Lectures')
+                        st.session_state.lectures_df["Date"] = pd.to_datetime(st.session_state.lectures_df["Date"]).dt.date
+                        st.success("Loaded Lectures")
+                        
                     # Call Schedule
                     if 'Call Schedule' in xls.sheet_names:
                         st.session_state.call_schedule_df = pd.read_excel(xls, 'Call Schedule')
@@ -660,6 +782,7 @@ with tab_export:
                         st.session_state.inpatient_schedule_df = pd.read_excel(xls, 'Inpatient Schedule')
                         st.success("Loaded Inpatient Schedule")
                         
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Error loading state: {e}")
 
@@ -748,6 +871,27 @@ with tab_export:
                         coverage_text = "None."
 
 
+                    # 5. Lectures
+                    lecture_text = ""
+                    if 'lectures_df' in st.session_state and not st.session_state.lectures_df.empty:
+                        l_mask = (pd.to_datetime(st.session_state.lectures_df["Date"]) >= w_start_dt) & \
+                                 (pd.to_datetime(st.session_state.lectures_df["Date"]) <= w_end_dt)
+                        lec_week = st.session_state.lectures_df[l_mask].sort_values("Date")
+                        
+                        if not lec_week.empty:
+                            lec_unit = lec_week.iloc[0]["Unit"]
+                            lecture_text += f"EDUCATION/EVENTS: {lec_unit}\n"
+                            for _, r in lec_week.iterrows():
+                                ld_str = pd.to_datetime(r["Date"]).strftime("%A")
+                                slot = r["Time Slot"]
+                                topic = r["Topic/Speaker"]
+                                lecture_text += f"{ld_str} {slot}: {topic}\n"
+                        else:
+                            lecture_text = "EDUCATION/EVENTS:\nNone scheduled.\n"
+                    else:
+                        lecture_text = "EDUCATION/EVENTS:\nNone scheduled.\n"
+
+
                     email_body = f"""RESIDENT SCHEDULE WEEK OF {w_start_dt.strftime('%m/%d/%y')}
 
 CALL ({call_dates_str}):
@@ -763,6 +907,7 @@ CROSS COVERAGE:
 RESIDENTS ON VACATION:
 {vacation_text}
 
+{lecture_text}
 CLINIC:
 (Refer to Block Schedule)
 """
