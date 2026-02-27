@@ -72,9 +72,21 @@ with st.sidebar:
             st.error(f"Error processing file: {e}")
 
 # Tabs
-tab_residents, tab_blocks, tab_call, tab_inpatient, tab_vacation, tab_coverage, tab_lectures, tab_export = st.tabs([
-    "Residents & Attendings", "Block Schedule", "Call Schedule", "Inpatient Schedule", "Vacation", "Cross Coverage", "Lecture Schedule", "Export"
+tab_home, tab_residents, tab_blocks, tab_call, tab_inpatient, tab_vacation, tab_coverage, tab_lectures, tab_export = st.tabs([
+    "Home", "Residents & Attendings", "Block Schedule", "Call Schedule", "Inpatient Schedule", "Vacation", "Cross Coverage", "Lecture Schedule", "Export"
 ])
+
+with tab_home:
+    st.title("About")
+    try:
+        with open("README.md", "r") as f:
+            readme_content = f.read()
+            st.markdown(readme_content)
+    except FileNotFoundError:
+        st.error("README.md not found.")
+    
+    st.divider()
+    st.markdown("🔗 **[View Project on GitHub](https://github.com/)**")
 
 with tab_residents:
     col1, col2 = st.columns(2)
@@ -224,7 +236,7 @@ with tab_blocks:
 
         # Options for dropdown (Attendings + Special Rotations)
         attending_options = st.session_state.attendings_df["Name"].tolist() if not st.session_state.attendings_df.empty else []
-        options = ["Satellite (L&M)", "Elective", "Research"] + attending_options
+        options = ["Satellite (L&M)", "Satellite (Proton)", "Elective", "Research"] + attending_options
         
         column_config = {}
         for col in block_names:
@@ -243,7 +255,7 @@ with tab_blocks:
                 required=False
             )
         
-        st.write("Assign an Attending or Rotation (e.g. Satellite (L&M)) for each resident per block.")
+        st.write("Assign an Attending or Rotation (e.g. Satellite (L&M) or Satellite (Proton)) for each resident per block.")
         st.info("💡 **Tip:** To create combined rotations (e.g., 'Dr. A & Dr. B') or split blocks, simply add them as a new 'Attending' in the **Residents & Attendings** tab.")
         
         edited_assignments = st.data_editor(
@@ -259,38 +271,69 @@ with tab_blocks:
              st.session_state.block_assignments = edited_assignments.set_index("index")
              st.session_state.block_assignments.index.name = None # Clean up index name
 
-        # Statistics
+        # Statistics & Tally
         st.divider()
-        st.subheader("Rotation Statistics")
-        if not st.session_state.block_assignments.empty:
-            # Calculate counts per resident
-            stats_data = []
-            for r in resident_names:
-                # Get Prior
-                prior_el = 0
-                prior_sat = 0 
-                # Lookup prior
-                try:
-                    row = st.session_state.residents_df[st.session_state.residents_df["Name"] == r].iloc[0]
-                    if "Prior Electives" in row:
-                        prior_el = int(row["Prior Electives"]) if pd.notna(row["Prior Electives"]) else 0
-                except:
-                    pass
+        col_s1, col_s2 = st.columns(2)
+        
+        with col_s1:
+            st.subheader("Rotation Statistics")
+            if not st.session_state.block_assignments.empty:
+                # Calculate counts per resident
+                stats_data = []
+                for r in resident_names:
+                    # Get Prior
+                    prior_el = 0
+                    prior_sat = 0 
+                    # Lookup prior
+                    try:
+                        row = st.session_state.residents_df[st.session_state.residents_df["Name"] == r].iloc[0]
+                        if "Prior Electives" in row:
+                            prior_el = int(row["Prior Electives"]) if pd.notna(row["Prior Electives"]) else 0
+                    except:
+                        pass
+                    
+                    # Get Scheduled
+                    row_assign = st.session_state.block_assignments.loc[r]
+                    sched_el = row_assign.astype(str).str.contains("Elective", case=False).sum()
+                    sched_sat_lm = row_assign.astype(str).str.contains("Satellite (L&M)", case=False, regex=False).sum()
+                    sched_sat_pr = row_assign.astype(str).str.contains("Satellite (Proton)", case=False, regex=False).sum()
+                    
+                    stats_data.append({
+                        "Resident": r,
+                        "Total Electives": prior_el + sched_el,
+                        "Satellite (L&M)": sched_sat_lm,
+                        "Satellite (Proton)": sched_sat_pr,
+                        "Prior Electives": prior_el,
+                        "Scheduled Electives": sched_el
+                    })
                 
-                # Get Scheduled
-                row_assign = st.session_state.block_assignments.loc[r]
-                sched_el = row_assign.astype(str).str.contains("Elective", case=False).sum()
-                sched_sat = row_assign.astype(str).str.contains("Satellite (L&M)", case=False, regex=False).sum()
+                st.dataframe(pd.DataFrame(stats_data), use_container_width=True)
                 
-                stats_data.append({
-                    "Resident": r,
-                    "Total Electives": prior_el + sched_el,
-                    "Scheduled Satellite (L&M)": sched_sat,
-                    "Prior Electives": prior_el,
-                    "Scheduled Electives": sched_el
-                })
-            
-            st.dataframe(pd.DataFrame(stats_data), use_container_width=True)
+        with col_s2:
+            st.subheader("Attending Coverage Tally")
+            if not st.session_state.block_assignments.empty and not st.session_state.attendings_df.empty:
+                tally_data = {}
+                # For each Block
+                for b in block_names:
+                    col_tally = []
+                    # Get all assignments in this block
+                    if b in st.session_state.block_assignments.columns:
+                        block_entries = st.session_state.block_assignments[b].dropna().astype(str).tolist()
+                        combined_string = " ".join(block_entries)
+                        
+                        # Check each attending
+                        for a in attending_options:
+                            # if attending name is in combined_string (handles "Dr. A / Dr. B")
+                            if a in combined_string:
+                                col_tally.append("✅")
+                            else:
+                                col_tally.append("❌")
+                    else:
+                        col_tally = ["❌"] * len(attending_options)
+                    tally_data[b] = col_tally
+                    
+                tally_df = pd.DataFrame(tally_data, index=attending_options)
+                st.dataframe(tally_df, use_container_width=True)
 
     else:
         st.warning("Please add Residents and Blocks first.")
@@ -912,6 +955,11 @@ CLINIC:
 (Refer to Block Schedule)
 """
                     st.text_area("Email Content", value=email_body, height=300)
+                    
+                    import urllib.parse
+                    encoded_body = urllib.parse.quote(email_body)
+                    mailto_link = f"mailto:?subject=Resident Schedule: Week of {w_start_dt.strftime('%m/%d/%y')}&body={encoded_body}"
+                    st.markdown(f'<a href="{mailto_link}" target="_blank"><button style="padding:0.5rem 1rem; border-radius:4px; border:none; background-color:#FF4B4B; color:white; font-weight:bold; cursor:pointer;">📧 Open in Default Email Client</button></a>', unsafe_allow_html=True)
     
         else:
             st.info("Generate a Call Schedule first.")

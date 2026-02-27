@@ -35,7 +35,7 @@ class ScheduleSolver:
         return weeks
 
     def _is_on_satellite(self, resident_name: str, week_start: date, week_end: date) -> bool:
-        """Checks if a resident is assigned to 'Satellite (L&M)' during this week."""
+        """Checks if a resident is assigned to 'Satellite (L&M)' or 'Satellite (Proton)' during this week."""
         # Find which block includes this week
         # Simplification: specific logic to map week -> block
         if self.blocks_df.empty or self.assignments_df.empty:
@@ -52,7 +52,7 @@ class ScheduleSolver:
                 block_name = block['Block Name']
                 if block_name in self.assignments_df.columns:
                     assignment = self.assignments_df.loc[resident_name, block_name]
-                    if assignment == "Satellite (L&M)":
+                    if assignment in ["Satellite (L&M)", "Satellite (Proton)"]:
                         return True
         return False
 
@@ -143,7 +143,7 @@ class ScheduleSolver:
             if attendings:
                 self.model.Add(sum(y[a, w_idx] for a in attendings) == 1)
 
-        # Constraint 2: Availability (Satellite (L&M) & Vacation) for Residents
+        # Constraint 2: Availability (Satellite & Vacation) for Residents
         # Skip if Locked!
         for r in residents:
             for w_idx, (w_start, w_end) in enumerate(weeks):
@@ -151,7 +151,7 @@ class ScheduleSolver:
                 if (r, w_idx) in locks:
                     continue
                     
-                # Satellite (L&M)
+                # Satellite (L&M or Proton)
                 if self._is_on_satellite(r, w_start, w_end):
                     self.model.Add(x[r, w_idx] == 0)
                 # Vacation
@@ -215,10 +215,10 @@ class ScheduleSolver:
         
     def solve_block_schedule(self) -> pd.DataFrame:
         """
-        Assigns residents to Attendings, Satellite (L&M), or Elective for each block.
+        Assigns residents to Attendings, Satellite, or Elective for each block.
         Constraints:
         1. Each resident has exactly 1 assignment per block.
-        2. Satellite (L&M) must have at least 1 resident.
+        2. Satellite (L&M) must have at least 1 resident. (Proton is optional)
         3. Attendings can take max 1 resident (can be adjusted).
         4. Residents should rotate (unique pairings).
         """
@@ -232,7 +232,7 @@ class ScheduleSolver:
             return pd.DataFrame()
         
         # Assignments: Attendings + Special
-        assignments = attendings + ["Satellite (L&M)", "Elective"]
+        assignments = attendings + ["Satellite (L&M)", "Satellite (Proton)", "Elective"]
         
         # Variables: x[r, b, a]
         x = {}
@@ -401,7 +401,7 @@ class ScheduleSolver:
                     self.model.Add(x[r, d_idx] == 0)
                     continue
                     
-                # 2a. Satellite (L&M) Rule
+                # 2a. Satellite Rule
                 if self._is_on_satellite(r, d, d):
                     self.model.Add(x[r, d_idx] == 0)
                     continue
@@ -551,7 +551,7 @@ class ScheduleSolver:
                 if r == away_resident: continue
                 # 2. Is on vacation themselves
                 if self._is_on_vacation(r, d, d): continue
-                # 3. Is on Satellite (L&M) (rigid rotation)
+                # 3. Is on Satellite (rigid rotation)
                 if self._is_on_satellite(r, d, d): continue
                 # 4. Is already covering someone today
                 if daily_assignments.get((d, r), False): continue
