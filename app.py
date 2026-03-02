@@ -104,13 +104,14 @@ with tab_residents:
                     options=["PGY-2", "PGY-3", "PGY-4", "PGY-5"],
                     required=True
                 )
-            }
+            },
+            key="residents_editor"
         )
         
     with col2:
         st.subheader("Attendings")
         st.info("Edit attending details. 'Clinic Days' should be comma-separated (e.g., 'Monday, Tuesday').")
-        st.session_state.attendings_df = st.data_editor(st.session_state.attendings_df, num_rows="dynamic", use_container_width=True)
+        st.session_state.attendings_df = st.data_editor(st.session_state.attendings_df, num_rows="dynamic", use_container_width=True, key="attendings_editor")
 
 with tab_blocks:
     st.header("Block Schedule")
@@ -187,7 +188,8 @@ with tab_blocks:
         column_config={
             "Start Date": st.column_config.DateColumn("Start Date", format="MM/DD/YYYY"),
             "End Date": st.column_config.DateColumn("End Date", format="MM/DD/YYYY")
-        }
+        },
+        key="blocks_editor"
     )
 
     # 2. Assign Residents to Blocks
@@ -263,7 +265,8 @@ with tab_blocks:
             column_config=column_config,
             disabled=["index"], # Disable editing the resident name
             hide_index=True,
-            use_container_width=True
+            use_container_width=True,
+            key="block_assignments_editor"
         )
         
         # Save back to session state (setting index back to resident name)
@@ -321,18 +324,20 @@ with tab_blocks:
                         block_entries = st.session_state.block_assignments[b].dropna().astype(str).tolist()
                         combined_string = " ".join(block_entries)
                         
-                        # Check each attending
-                        for a in attending_options:
-                            # if attending name is in combined_string (handles "Dr. A / Dr. B")
+                        # Check each attending / satellite
+                        tally_entities = attending_options + ["Satellite (L&M)", "Satellite (Proton)"]
+                        for a in tally_entities:
+                            # if attending/satellite name is in combined_string (handles "Dr. A / Dr. B")
                             if a in combined_string:
                                 col_tally.append("✅")
                             else:
                                 col_tally.append("❌")
                     else:
-                        col_tally = ["❌"] * len(attending_options)
+                        tally_entities = attending_options + ["Satellite (L&M)", "Satellite (Proton)"]
+                        col_tally = ["❌"] * len(tally_entities)
                     tally_data[b] = col_tally
                     
-                tally_df = pd.DataFrame(tally_data, index=attending_options)
+                tally_df = pd.DataFrame(tally_data, index=tally_entities)
                 st.dataframe(tally_df, use_container_width=True)
 
     else:
@@ -431,7 +436,8 @@ with tab_call:
                 },
                 num_rows="fixed",
                 hide_index=True,
-                use_container_width=True
+                use_container_width=True,
+                key="call_schedule_editor"
             )
             
             # Stats
@@ -497,7 +503,8 @@ with tab_inpatient:
                 },
                 num_rows="fixed",
                 hide_index=True,
-                use_container_width=True
+                use_container_width=True,
+                key="inpatient_schedule_editor"
             )
             
             # Stats
@@ -550,7 +557,8 @@ with tab_vacation:
         column_config={
             "Start Date": st.column_config.DateColumn("Start Date", format="MM/DD/YYYY"),
             "End Date": st.column_config.DateColumn("End Date", format="MM/DD/YYYY")
-        }
+        },
+        key="vacations_editor"
     )
 
 with tab_coverage:
@@ -666,7 +674,8 @@ with tab_lectures:
                 "Unit": st.column_config.TextColumn("Unit"),
                 "Time Slot": st.column_config.SelectboxColumn("Time Slot", options=t_options),
                 "Topic/Speaker": st.column_config.TextColumn("Topic/Speaker")
-            }
+            },
+            key="lectures_editor"
         )
     else:
         st.info("No lectures added yet.")
