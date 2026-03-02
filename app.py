@@ -86,7 +86,7 @@ with tab_home:
         st.error("README.md not found.")
     
     st.divider()
-    st.markdown("🔗 **[View Project on GitHub](https://github.com/)**")
+    st.markdown("🔗 **[View Project on GitHub](https://github.com/DeepLearner135/Residency-Schedule-Maker)**")
 
 with tab_residents:
     col1, col2 = st.columns(2)
