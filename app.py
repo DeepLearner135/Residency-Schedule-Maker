@@ -266,6 +266,7 @@ with tab_blocks:
             disabled=["index"], # Disable editing the resident name
             hide_index=True,
             use_container_width=True,
+            height=600,
             key="block_assignments_editor"
         )
         
@@ -310,7 +311,7 @@ with tab_blocks:
                         "Scheduled Electives": sched_el
                     })
                 
-                st.dataframe(pd.DataFrame(stats_data), use_container_width=True)
+                st.dataframe(pd.DataFrame(stats_data), use_container_width=True, height=600)
                 
         with col_s2:
             st.subheader("Attending Coverage Tally")
@@ -338,7 +339,7 @@ with tab_blocks:
                     tally_data[b] = col_tally
                     
                 tally_df = pd.DataFrame(tally_data, index=tally_entities)
-                st.dataframe(tally_df, use_container_width=True)
+                st.dataframe(tally_df, use_container_width=True, height=600)
 
     else:
         st.warning("Please add Residents and Blocks first.")
