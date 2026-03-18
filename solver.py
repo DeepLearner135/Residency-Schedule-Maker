@@ -260,45 +260,47 @@ class ScheduleSolver:
         for b in blocks:
             self.model.Add(sum(x[r, b, "Satellite (L&M)"] for r in residents) >= 1)
             
-        # 3. Attending Capacity (Max 1 per attending)
+        import re
+        base_attending_map = {}
+        all_base_attendings = set()
+        for a in attendings:
+            bases = [part.strip() for part in re.split(r'[/&]', a) if part.strip()]
+            base_attending_map[a] = bases
+            all_base_attendings.update(bases)
+
+        # 3. Base Attending Capacity (Max 1 per individual doctor)
         for b in blocks:
-            for a in attendings:
-                self.model.Add(sum(x[r, b, a] for r in residents) <= 1)
+            for base_A in all_base_attendings:
+                coverage_vars = []
+                for a in attendings:
+                    if base_A in base_attending_map[a]:
+                        for r in residents:
+                            coverage_vars.append(x[r, b, a])
+                if coverage_vars:
+                    self.model.Add(sum(coverage_vars) <= 1)
                 
         # 4. Rotation Logic (Try to maximize unique attendings for each resident)
-        # Soft constraint: Penalty for repeating an attending
-        repeats = []
+        # Soft constraint: Penalty for repeating a base attending
         for r in residents:
-            for a in attendings:
-                # Count how many times resident r is with attending a
-                count = sum(x[r, b, a] for b in blocks)
-                # We want count <= 1 ideally.
-                # Let's minimize count * count or just count if > 1
-                # Simple approach: Create a bool for "is with attending a"
-                # is_assigned = self.model.NewBoolVar(f'assigned_{r}_{a}')
-                # self.model.Add(count >= 1).OnlyEnforceIf(is_assigned) 
-                
-                # Better: Maximize "assigned at least once".
-                # But strict constraint: Try not to repeat.
-                # If # blocks < # attendings, we can enforce count <= 1.
-                if len(blocks) <= len(attendings):
-                     self.model.Add(count <= 1)
-                else:
-                    # Soft: minimize max(count)
-                    pass 
+            for base_A in all_base_attendings:
+                count_vars = []
+                for a in attendings:
+                    if base_A in base_attending_map[a]:
+                        for b in blocks:
+                            count_vars.append(x[r, b, a])
+                if len(blocks) <= len(all_base_attendings):
+                     self.model.Add(sum(count_vars) <= 1)
 
-        # Objective: Prioritize Attending assignments over Elective?
-        # User said "There's also elective blocks".
-        # We want to fill attendings first?
-        # Let's maximize the number of Resident-Attending pairings.
-        
-        attending_assignments = []
+        # Objective: Maximize total base attending coverage across all blocks
+        # This naturally prioritizes combined blocks if there are more attendings than residents
+        objective_terms = []
         for r in residents:
             for b in blocks:
                 for a in attendings:
-                    attending_assignments.append(x[r, b, a])
+                    weight = len(base_attending_map.get(a, [a]))
+                    objective_terms.append(weight * x[r, b, a])
         
-        self.model.Maximize(sum(attending_assignments))
+        self.model.Maximize(sum(objective_terms))
         
         status = self.solver.Solve(self.model)
         
