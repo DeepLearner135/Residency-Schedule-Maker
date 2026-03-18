@@ -242,6 +242,7 @@ class ScheduleSolver:
                     x[r, b, a] = self.model.NewBoolVar(f'block_{r}_{b}_{a}')
                     
         # Apply Locks
+        locked_assignments = set()
         if not self.assignments_df.empty:
             for r in residents:
                 if r in self.assignments_df.index:
@@ -250,6 +251,15 @@ class ScheduleSolver:
                             assigned_val = self.assignments_df.loc[r, b]
                             if pd.notna(assigned_val) and assigned_val != "Unassigned" and assigned_val in assignments:
                                 self.model.Add(x[r, b, assigned_val] == 1)
+                                locked_assignments.add((r, b, assigned_val))
+                                
+        # Prevent solver from autonomously assigning Elective or Research
+        for r in residents:
+            for b in blocks:
+                if (r, b, "Elective") not in locked_assignments:
+                    self.model.Add(x[r, b, "Elective"] == 0)
+                if (r, b, "Research") not in locked_assignments:
+                    self.model.Add(x[r, b, "Research"] == 0)
                                 
         # 1. Exact assignment
         for r in residents:
