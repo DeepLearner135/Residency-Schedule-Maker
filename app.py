@@ -811,6 +811,14 @@ with tab_export:
                     if 'Block Assignments' in xls.sheet_names:
                         df_assign = pd.read_excel(xls, 'Block Assignments', index_col=0)
                         df_assign = df_assign.where(pd.notna(df_assign), None)
+                        
+                        import re
+                        new_cols = []
+                        for c in df_assign.columns:
+                            c_clean = re.sub(r'\s*\(\d{2}/\d{2}/\d{4} - \d{2}/\d{2}/\d{4}\)$', '', str(c))
+                            new_cols.append(c_clean)
+                        df_assign.columns = new_cols
+                        
                         st.session_state.block_assignments = df_assign
                         st.success("Loaded Block Assignments")
                         
