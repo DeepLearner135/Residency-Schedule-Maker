@@ -810,6 +810,7 @@ with tab_export:
                     # Assignments
                     if 'Block Assignments' in xls.sheet_names:
                         df_assign = pd.read_excel(xls, 'Block Assignments', index_col=0)
+                        df_assign = df_assign.where(pd.notna(df_assign), None)
                         st.session_state.block_assignments = df_assign
                         st.success("Loaded Block Assignments")
                         
@@ -826,12 +827,14 @@ with tab_export:
                         
                     # Call Schedule
                     if 'Call Schedule' in xls.sheet_names:
-                        st.session_state.call_schedule_df = pd.read_excel(xls, 'Call Schedule')
+                        df_call = pd.read_excel(xls, 'Call Schedule')
+                        st.session_state.call_schedule_df = df_call.where(pd.notna(df_call), None)
                         st.success("Loaded Call Schedule")
                         
                     # Inpatient
                     if 'Inpatient Schedule' in xls.sheet_names:
-                        st.session_state.inpatient_schedule_df = pd.read_excel(xls, 'Inpatient Schedule')
+                        df_inpatient = pd.read_excel(xls, 'Inpatient Schedule')
+                        st.session_state.inpatient_schedule_df = df_inpatient.where(pd.notna(df_inpatient), None)
                         st.success("Loaded Inpatient Schedule")
                         
                     st.rerun()
