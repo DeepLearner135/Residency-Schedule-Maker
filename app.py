@@ -681,6 +681,44 @@ with tab_lectures:
     else:
         st.info("No lectures added yet.")
 
+with tab_composite:
+    st.header("Composite Calendar")
+    st.write("A master timeline combining all schedule components (Blocks, Clinic, Call, Inpatient, Vacations, and Cross Coverage).")
+    
+    if st.button("Generate Master Calendar"):
+        import utils
+        
+        c_blocks = st.session_state.get('blocks_df')
+        c_res = st.session_state.get('residents_df')
+        c_att = st.session_state.get('attendings_df')
+        c_assign = st.session_state.get('block_assignments')
+        c_vac = st.session_state.get('vacations_df')
+        c_inp = st.session_state.get('inpatient_schedule_df')
+        c_cov = st.session_state.get('coverage_df')
+        c_call = st.session_state.get('call_schedule_df')
+        
+        if c_blocks is not None and not c_blocks.empty and c_res is not None and not c_res.empty:
+            with st.spinner("Generating Calendar..."):
+                master_df = utils.generate_composite_calendar(
+                    start_date, end_date,
+                    c_res, c_att, c_blocks, c_assign,
+                    c_vac, c_inp, c_cov, c_call
+                )
+                
+            st.dataframe(master_df, use_container_width=True, height=800)
+            
+            # Allow download
+            csv = master_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                "Verify & Download (CSV)",
+                csv,
+                "composite_calendar.csv",
+                "text/csv",
+                key='download-composite-csv'
+            )
+        else:
+            st.error("Please add Residents and Blocks to generate the calendar.")
+
 with tab_export:
     st.header("Export & Import")
     
