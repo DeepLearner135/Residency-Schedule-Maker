@@ -73,7 +73,7 @@ with st.sidebar:
 
 # Tabs
 tab_home, tab_residents, tab_blocks, tab_call, tab_inpatient, tab_vacation, tab_coverage, tab_lectures, tab_export = st.tabs([
-    "Home", "Residents & Attendings", "Block Schedule", "Call Schedule", "Inpatient Schedule", "Vacation", "Cross Coverage", "Lecture Schedule", "Export"
+    "Home", "Residents & Attendings", "Block Schedule", "Call Schedule", "Inpatient Schedule", "Vacation", "Cross Coverage", "Lecture Schedule", "Export/Import"
 ])
 
 with tab_home:
