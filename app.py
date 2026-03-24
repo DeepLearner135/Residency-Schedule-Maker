@@ -72,8 +72,8 @@ with st.sidebar:
             st.error(f"Error processing file: {e}")
 
 # Tabs
-tab_home, tab_residents, tab_blocks, tab_call, tab_inpatient, tab_vacation, tab_coverage, tab_lectures, tab_export = st.tabs([
-    "Home", "Residents & Attendings", "Block Schedule", "Call Schedule", "Inpatient Schedule", "Vacation", "Cross Coverage", "Lecture Schedule", "Export/Import"
+tab_home, tab_residents, tab_blocks, tab_call, tab_inpatient, tab_vacation, tab_coverage, tab_lectures, tab_composite, tab_export = st.tabs([
+    "Home", "Residents & Attendings", "Block Schedule", "Call Schedule", "Inpatient Schedule", "Vacation", "Cross Coverage", "Lecture Schedule", "Composite Calendar", "Export/Import"
 ])
 
 with tab_home:
@@ -97,7 +97,7 @@ with tab_residents:
         st.session_state.residents_df = st.data_editor(
             st.session_state.residents_df, 
             num_rows="dynamic",
-            use_container_width=True,
+            width='stretch',
             column_config={
                 "PGY": st.column_config.SelectboxColumn(
                     "PGY",
@@ -111,7 +111,7 @@ with tab_residents:
     with col2:
         st.subheader("Attendings")
         st.info("Edit attending details. 'Clinic Days' should be comma-separated (e.g., 'Monday, Tuesday').")
-        st.session_state.attendings_df = st.data_editor(st.session_state.attendings_df, num_rows="dynamic", use_container_width=True, key="attendings_editor")
+        st.session_state.attendings_df = st.data_editor(st.session_state.attendings_df, num_rows="dynamic", width='stretch', key="attendings_editor")
 
 with tab_blocks:
     st.header("Block Schedule")
@@ -265,7 +265,7 @@ with tab_blocks:
             column_config=column_config,
             disabled=["index"], # Disable editing the resident name
             hide_index=True,
-            use_container_width=True,
+            width='stretch',
             height=600,
             key="block_assignments_editor"
         )
@@ -311,7 +311,7 @@ with tab_blocks:
                         "Scheduled Electives": sched_el
                     })
                 
-                st.dataframe(pd.DataFrame(stats_data), use_container_width=True, height=600)
+                st.dataframe(pd.DataFrame(stats_data), width='stretch', height=600)
                 
         with col_s2:
             st.subheader("Attending Coverage Tally")
@@ -339,7 +339,7 @@ with tab_blocks:
                     tally_data[b] = col_tally
                     
                 tally_df = pd.DataFrame(tally_data, index=tally_entities)
-                st.dataframe(tally_df, use_container_width=True, height=600)
+                st.dataframe(tally_df, width='stretch', height=600)
 
     else:
         st.warning("Please add Residents and Blocks first.")
@@ -437,7 +437,7 @@ with tab_call:
                 },
                 num_rows="fixed",
                 hide_index=True,
-                use_container_width=True,
+                width='stretch',
                 key="call_schedule_editor"
             )
             
@@ -504,7 +504,7 @@ with tab_inpatient:
                 },
                 num_rows="fixed",
                 hide_index=True,
-                use_container_width=True,
+                width='stretch',
                 key="inpatient_schedule_editor"
             )
             
@@ -554,7 +554,7 @@ with tab_vacation:
     st.session_state.vacations_df = st.data_editor(
         st.session_state.vacations_df,
         num_rows="dynamic",
-        use_container_width=True,
+        width='stretch',
         column_config={
             "Start Date": st.column_config.DateColumn("Start Date", format="MM/DD/YYYY"),
             "End Date": st.column_config.DateColumn("End Date", format="MM/DD/YYYY")
@@ -624,14 +624,14 @@ with tab_coverage:
                 },
                 num_rows="dynamic",
                 hide_index=True,
-                use_container_width=True,
+                width='stretch',
                 key="coverage_editor"
             )
             
     with col_cov2:
         if 'coverage_stats' in st.session_state and not st.session_state.coverage_stats.empty:
             st.subheader("Coverage Stats")
-            st.dataframe(st.session_state.coverage_stats, use_container_width=True)
+            st.dataframe(st.session_state.coverage_stats, width='stretch')
 
 with tab_lectures:
     st.header("Lecture Schedule")
@@ -669,7 +669,7 @@ with tab_lectures:
         st.session_state.lectures_df = st.data_editor(
             st.session_state.lectures_df,
             num_rows="dynamic",
-            use_container_width=True,
+            width='stretch',
             column_config={
                 "Date": st.column_config.DateColumn("Date", format="MM/DD/YYYY"),
                 "Unit": st.column_config.TextColumn("Unit"),
@@ -705,7 +705,7 @@ with tab_composite:
                     c_vac, c_inp, c_cov, c_call
                 )
                 
-            st.dataframe(master_df, use_container_width=True, height=800)
+            st.dataframe(master_df, width='stretch', height=800)
             
             # Allow download
             csv = master_df.to_csv(index=False).encode('utf-8')
